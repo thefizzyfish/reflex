@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Reflex</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 420px;
+      min-height: 200px;
+      max-height: 500px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      color: #333;
+      background: #fafafa;
+      overflow-y: auto;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .host-info {
+      font-size: 11px;
+      opacity: 0.9;
+    }
+
+    .passive-indicator {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-left: 8px;
+      background: rgba(255,255,255,0.2);
+    }
+
+    .passive-indicator.active {
+      background: rgba(76, 175, 80, 0.4);
+    }
+
+    .controls {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e0e0e0;
+      background: white;
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #5a6fd6;
+    }
+
+    .btn-primary:disabled {
+      background: #b0b0b0;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #e0e0e0;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #d0d0d0;
+    }
+
+    .btn-secondary:disabled {
+      background: #f0f0f0;
+      color: #999;
+      cursor: not-allowed;
+    }
+
+    .meta {
+      padding: 12px 16px;
+      font-size: 12px;
+      color: #666;
+      background: white;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .results {
+      padding: 8px;
+    }
+
+    .param {
+      background: white;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .param-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+
+    .param-name {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .pill {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      background: #667eea;
+      color: white;
+    }
+
+    .source-pill {
+      font-size: 9px;
+      padding: 2px 5px;
+      border-radius: 3px;
+      background: #e0e0e0;
+      color: #666;
+      text-transform: uppercase;
+    }
+
+    .source-pill.fragment {
+      background: #fff3e0;
+      color: #e65100;
+    }
+
+    .param-value {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+
+    .match {
+      margin-top: 8px;
+      padding: 8px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      border-left: 3px solid #ccc;
+    }
+
+    .match.high {
+      border-left-color: #e53935;
+      background: #ffebee;
+    }
+
+    .match.medium {
+      border-left-color: #ff9800;
+      background: #fff3e0;
+    }
+
+    .match.low {
+      border-left-color: #4caf50;
+      background: #e8f5e9;
+    }
+
+    .match-kind {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #666;
+      margin-bottom: 4px;
+    }
+
+    .match-kind .subtype {
+      font-weight: 400;
+      color: #888;
+    }
+
+    .match-kind .interest {
+      float: right;
+      padding: 1px 4px;
+      border-radius: 2px;
+      font-size: 9px;
+    }
+
+    .interest-high {
+      background: #e53935;
+      color: white;
+    }
+
+    .interest-medium {
+      background: #ff9800;
+      color: white;
+    }
+
+    .interest-low {
+      background: #4caf50;
+      color: white;
+    }
+
+    .snippet {
+      font-family: "SF Mono", Monaco, Consolas, monospace;
+      font-size: 11px;
+      color: #333;
+      word-break: break-all;
+      white-space: pre-wrap;
+      background: rgba(255,255,255,0.5);
+      padding: 4px;
+      border-radius: 2px;
+    }
+
+    .encoding-info {
+      margin-top: 6px;
+      font-size: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .encoding-badge {
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
+    }
+
+    .encoding-raw {
+      background: #ffcdd2;
+      color: #c62828;
+    }
+
+    .encoding-encoded {
+      background: #c8e6c9;
+      color: #2e7d32;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 24px;
+      color: #888;
+    }
+
+    .options-link {
+      display: block;
+      text-align: center;
+      padding: 8px;
+      font-size: 11px;
+      color: #667eea;
+      text-decoration: none;
+      border-top: 1px solid #e0e0e0;
+      background: white;
+    }
+
+    .options-link:hover {
+      background: #f5f5f5;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Reflex <span class="passive-indicator" id="passiveIndicator">Passive Off</span></h1>
+    <div class="host-info" id="hostInfo">Loading...</div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-primary" id="scanBtn">Scan Page</button>
+    <button class="btn btn-secondary" id="exportBtn" disabled>Export JSON</button>
+  </div>
+
+  <div class="meta" id="meta">Click "Scan Page" to check for reflections.</div>
+
+  <div class="results" id="results"></div>
+
+  <a href="options.html" target="_blank" class="options-link">Options</a>
+
+  <script src="popup.js"></script>
+</body>
+</html>

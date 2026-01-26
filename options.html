@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Reflex Options</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      color: #333;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 24px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #667eea;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 24px;
+    }
+
+    .section {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .section h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 16px 0;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field:last-child {
+      margin-bottom: 0;
+    }
+
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    input[type="number"] {
+      width: 100px;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    input[type="number"]:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+
+    textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
+      resize: vertical;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+
+    .checkbox-item label {
+      font-weight: 400;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+    }
+
+    .toggle-label {
+      font-weight: 500;
+    }
+
+    .toggle-hint {
+      font-size: 12px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    /* Toggle switch */
+    .toggle {
+      position: relative;
+      width: 48px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: 0.3s;
+      border-radius: 26px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background-color: #667eea;
+    }
+
+    .toggle input:checked + .toggle-slider:before {
+      transform: translateX(22px);
+    }
+
+    .btn {
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #5a6fd6;
+    }
+
+    .status {
+      display: inline-block;
+      margin-left: 12px;
+      color: #4caf50;
+      font-weight: 500;
+    }
+
+    .footer {
+      margin-top: 24px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Reflex Options</h1>
+  <p class="subtitle">Configure reflection scanning behavior</p>
+
+  <!-- Passive Scanning Section -->
+  <div class="section">
+    <h2>Passive Scanning</h2>
+
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Enable Passive Scanning</div>
+        <div class="toggle-hint">Automatically scan all pages for reflections as you browse</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="passiveEnabled">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Scan Options Section -->
+  <div class="section">
+    <h2>Scan Options</h2>
+
+    <div class="field">
+      <label>Minimum Parameter Value Length</label>
+      <input type="number" id="minLen" min="1" max="100" value="4">
+      <div class="hint">Ignore parameters with values shorter than this (reduces false positives)</div>
+    </div>
+
+    <div class="field">
+      <label>URL Decode Depth</label>
+      <input type="number" id="decodeDepth" min="0" max="5" value="1">
+      <div class="hint">Number of URL decoding passes to try (increase if you see double-encoding)</div>
+    </div>
+
+    <div class="field">
+      <label>Max Findings Per Parameter</label>
+      <input type="number" id="maxFindingsPerParam" min="1" max="200" value="20">
+      <div class="hint">Limit matches to prevent excessive output</div>
+    </div>
+  </div>
+
+  <!-- Scan Targets Section -->
+  <div class="section">
+    <h2>Scan Targets</h2>
+    <div class="hint" style="margin-bottom: 12px;">Choose which parts of the page to scan for reflections</div>
+
+    <div class="checkbox-group">
+      <div class="checkbox-item">
+        <input type="checkbox" id="scanDomText" checked>
+        <label for="scanDomText">Scan visible text content (DOM text nodes)</label>
+      </div>
+      <div class="checkbox-item">
+        <input type="checkbox" id="scanHtml" checked>
+        <label for="scanHtml">Scan raw HTML (document.outerHTML)</label>
+      </div>
+      <div class="checkbox-item">
+        <input type="checkbox" id="scanAttrs" checked>
+        <label for="scanAttrs">Scan element attributes</label>
+      </div>
+      <div class="checkbox-item">
+        <input type="checkbox" id="scanInlineScripts" checked>
+        <label for="scanInlineScripts">Scan inline script contents</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ignored Parameters Section -->
+  <div class="section">
+    <h2>Ignored Parameters</h2>
+    <div class="hint" style="margin-bottom: 12px;">Parameter names to skip (one per line). Common tracking params are ignored by default.</div>
+
+    <div class="field">
+      <textarea id="ignoreParams" rows="8" placeholder="utm_source&#10;utm_medium&#10;..."></textarea>
+    </div>
+  </div>
+
+  <!-- Save Button -->
+  <div class="footer">
+    <button class="btn btn-primary" id="saveBtn">Save Settings</button>
+    <span class="status" id="status"></span>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
