@@ -9,6 +9,15 @@
 // Map<tabId, { result, timestamp }>
 const tabResults = new Map();
 
+// Per-tab verification state
+// Map<tabId, { verificationCount, lastVerifiedParam, debounceTimestamps }>
+const tabVerificationState = new Map();
+
+// Canary verification constants
+const CANARY_PREFIX = "rfx";
+const CANARY_LENGTH = 12;
+const VERIFICATION_DEBOUNCE_MS = 5000; // 5 seconds between same-param verifications
+
 // ============================================================
 // MESSAGE HANDLING
 // ============================================================
@@ -45,6 +54,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch(() => sendResponse({ passiveEnabled: false }));
     return true;
   }
+
+  if (type === "GET_CANARY_STATUS") {
+    // Check if canary verification is available for current host
+    loadSettings()
+      .then((settings) => {
+        const host = msg.host?.toLowerCase() || "";
+        const isInScope = isHostInScope(host, settings.inScopeHosts || []);
+        sendResponse({
+          canaryEnabled: settings.canaryEnabled && isInScope,
+          isInScope,
+          maxVerifications: settings.maxCanaryVerifications || 3
+        });
+      })
+      .catch(() => sendResponse({ canaryEnabled: false, isInScope: false }));
+    return true;
+  }
+
+  if (type === "VERIFY_FINDING") {
+    // Run canary verification for a specific finding
+    verifyFinding(msg.tabId, msg.url, msg.param, msg.source, msg.liveReload || false)
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
 });
 
 // ============================================================
@@ -77,6 +110,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
 // Clean up when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabResults.delete(tabId);
+  tabVerificationState.delete(tabId);
 });
 
 // Clear results when navigating away
@@ -84,6 +118,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") {
     // Reset results when page starts loading
     tabResults.delete(tabId);
+    tabVerificationState.delete(tabId);
     updateBadge(tabId, 0);
   }
 });
@@ -202,15 +237,232 @@ async function runScanOnActiveTab() {
 // ============================================================
 
 /**
- * Load settings (passive mode).
+ * Load settings (passive mode, canary settings).
  */
 async function loadSettings() {
   const defaults = {
-    passiveEnabled: false
+    passiveEnabled: false,
+    canaryEnabled: false,
+    canaryAutoVerify: false,
+    maxCanaryVerifications: 3,
+    inScopeHosts: []
   };
 
   const stored = await chrome.storage.sync.get(Object.keys(defaults));
   return { ...defaults, ...stored };
+}
+
+// ============================================================
+// CANARY VERIFICATION
+// ============================================================
+
+/**
+ * Generate a benign canary string.
+ * Format: rfx-[random alphanumeric]
+ * No special characters that could be interpreted as code.
+ */
+function generateCanary() {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let canary = CANARY_PREFIX + "-";
+  for (let i = 0; i < CANARY_LENGTH; i++) {
+    canary += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return canary;
+}
+
+/**
+ * Check if a hostname matches the in-scope list.
+ * Supports wildcard prefix (e.g., *.example.com matches sub.example.com).
+ */
+function isHostInScope(hostname, scopeList) {
+  if (!scopeList || !scopeList.length) return false;
+
+  const host = hostname.toLowerCase();
+
+  for (const pattern of scopeList) {
+    const p = pattern.toLowerCase().trim();
+    if (!p) continue;
+
+    if (p.startsWith("*.")) {
+      // Wildcard: *.example.com matches example.com and sub.example.com
+      const domain = p.slice(2);
+      if (host === domain || host.endsWith("." + domain)) {
+        return true;
+      }
+    } else {
+      // Exact match
+      if (host === p) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Verify a finding by sending a canary request.
+ * Returns verification result.
+ *
+ * @param {number} tabId - Tab ID
+ * @param {string} urlStr - Current page URL
+ * @param {string} paramName - Parameter name to verify
+ * @param {string} source - "query" or "fragment"
+ * @param {boolean} liveReload - If true, reload the actual page instead of using fetch
+ */
+async function verifyFinding(tabId, urlStr, paramName, source, liveReload = false) {
+  const settings = await loadSettings();
+
+  // Parse URL
+  let url;
+  try {
+    url = new URL(urlStr);
+  } catch {
+    return { ok: false, error: "Invalid URL" };
+  }
+
+  // Check scope
+  if (!isHostInScope(url.hostname, settings.inScopeHosts)) {
+    return { ok: false, error: "Host not in scope" };
+  }
+
+  // Check if canary is enabled
+  if (!settings.canaryEnabled) {
+    return { ok: false, error: "Canary verification disabled" };
+  }
+
+  // Get/initialize tab verification state
+  let state = tabVerificationState.get(tabId);
+  if (!state) {
+    state = { verificationCount: 0, debounceTimestamps: new Map(), pendingCanary: null };
+    tabVerificationState.set(tabId, state);
+  }
+
+  // Check verification limit
+  const maxVerifications = settings.maxCanaryVerifications || 3;
+  if (state.verificationCount >= maxVerifications) {
+    return { ok: false, error: `Max verifications (${maxVerifications}) reached for this page` };
+  }
+
+  // Check debounce for this param
+  const debounceKey = `${paramName}:${source}`;
+  const lastVerified = state.debounceTimestamps.get(debounceKey) || 0;
+  if (Date.now() - lastVerified < VERIFICATION_DEBOUNCE_MS) {
+    return { ok: false, error: "Please wait before re-verifying this parameter" };
+  }
+
+  // Generate canary
+  const canary = generateCanary();
+
+  // Build verification URL
+  const verifyUrl = new URL(urlStr);
+  if (source === "query") {
+    verifyUrl.searchParams.set(paramName, canary);
+  } else if (source === "fragment") {
+    // Handle fragment parameters
+    let hash = verifyUrl.hash.slice(1);
+    try {
+      const hashParams = new URLSearchParams(hash.includes("?") ? hash.split("?")[1] : hash);
+      hashParams.set(paramName, canary);
+      if (hash.includes("?")) {
+        verifyUrl.hash = hash.split("?")[0] + "?" + hashParams.toString();
+      } else {
+        verifyUrl.hash = hashParams.toString();
+      }
+    } catch {
+      return { ok: false, error: "Could not modify fragment parameter" };
+    }
+  } else {
+    return { ok: false, error: "Unsupported parameter source" };
+  }
+
+  // Update state
+  state.verificationCount++;
+  state.debounceTimestamps.set(debounceKey, Date.now());
+
+  // For fragment parameters or live reload requests, we need to actually navigate
+  // because fetch() doesn't send fragments to the server and won't execute JS
+  if (source === "fragment" || liveReload) {
+    // Store the canary so we can check for it after page loads
+    state.pendingCanary = {
+      canary,
+      paramName,
+      source,
+      timestamp: Date.now()
+    };
+
+    // Navigate the tab to the verification URL
+    try {
+      await chrome.tabs.update(tabId, { url: verifyUrl.toString() });
+
+      return {
+        ok: true,
+        verified: null, // Unknown until page reloads
+        canary,
+        verifiedAt: new Date().toISOString(),
+        verificationMethod: "live-reload",
+        notes: "Page reloading with canary. Re-scan to check reflection.",
+        pendingVerification: true
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Navigation failed: ${err.message}`
+      };
+    }
+  }
+
+  // For query parameters, try fetch first (non-disruptive)
+  try {
+    const response = await fetch(verifyUrl.toString(), {
+      method: "GET",
+      credentials: "include", // Include cookies for auth
+      redirect: "follow"
+    });
+
+    if (!response.ok) {
+      return {
+        ok: true,
+        verified: false,
+        canary,
+        verifiedAt: new Date().toISOString(),
+        verificationMethod: "canary-fetch",
+        notes: `HTTP ${response.status} ${response.statusText}`
+      };
+    }
+
+    const text = await response.text();
+    const reflected = text.includes(canary);
+
+    // If not found in raw HTML, suggest live reload for JS-rendered content
+    if (!reflected) {
+      return {
+        ok: true,
+        verified: false,
+        canary,
+        verifiedAt: new Date().toISOString(),
+        verificationMethod: "canary-fetch",
+        notes: "Not in raw HTML. Try 'Live Verify' for JS-rendered content.",
+        suggestLiveReload: true
+      };
+    }
+
+    return {
+      ok: true,
+      verified: true,
+      canary,
+      verifiedAt: new Date().toISOString(),
+      verificationMethod: "canary-fetch",
+      notes: "Canary found in server response"
+    };
+  } catch (err) {
+    return {
+      ok: true,
+      verified: false,
+      canary,
+      verifiedAt: new Date().toISOString(),
+      verificationMethod: "canary-fetch",
+      notes: `Fetch failed: ${err.message}`
+    };
+  }
 }
 
 /**
@@ -225,7 +477,11 @@ async function loadOptions() {
     scanHtml: true,
     scanAttrs: true,
     scanInlineScripts: true,
-    maxFindingsPerParam: 20
+    maxFindingsPerParam: 20,
+    // Taint detection
+    enableTaintAnalysis: true,
+    enableInstrumentation: false,
+    minTokenLength: 6
   };
 
   const stored = await chrome.storage.sync.get(Object.keys(defaults));

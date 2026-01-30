@@ -22,6 +22,19 @@ const els = {
   // Ignored params
   ignoreParams: document.getElementById("ignoreParams"),
 
+  // Scope (for canary verification)
+  inScopeHosts: document.getElementById("inScopeHosts"),
+
+  // Canary verification
+  canaryEnabled: document.getElementById("canaryEnabled"),
+  canaryAutoVerify: document.getElementById("canaryAutoVerify"),
+  maxCanaryVerifications: document.getElementById("maxCanaryVerifications"),
+
+  // Taint detection
+  enableTaintAnalysis: document.getElementById("enableTaintAnalysis"),
+  enableInstrumentation: document.getElementById("enableInstrumentation"),
+  minTokenLength: document.getElementById("minTokenLength"),
+
   // Save
   saveBtn: document.getElementById("saveBtn"),
   status: document.getElementById("status")
@@ -55,7 +68,20 @@ const defaults = {
     "utm_content",
     "gclid",
     "fbclid"
-  ]
+  ],
+
+  // Scope (for canary verification)
+  inScopeHosts: [],
+
+  // Canary verification (active testing)
+  canaryEnabled: false,
+  canaryAutoVerify: false,
+  maxCanaryVerifications: 3,
+
+  // Taint detection
+  enableTaintAnalysis: true,
+  enableInstrumentation: false, // Runtime sink monitoring (off by default)
+  minTokenLength: 6
 };
 
 // ============================================================
@@ -86,8 +112,32 @@ async function init() {
   // Populate ignored params
   els.ignoreParams.value = (opts.ignoreParams || []).join("\n");
 
+  // Populate scope hosts
+  els.inScopeHosts.value = (opts.inScopeHosts || []).join("\n");
+
+  // Populate canary verification settings
+  els.canaryEnabled.checked = opts.canaryEnabled;
+  els.canaryAutoVerify.checked = opts.canaryAutoVerify;
+  els.maxCanaryVerifications.value = opts.maxCanaryVerifications;
+
+  // Populate taint detection settings
+  els.enableTaintAnalysis.checked = opts.enableTaintAnalysis;
+  els.enableInstrumentation.checked = opts.enableInstrumentation;
+  els.minTokenLength.value = opts.minTokenLength;
+
+  // Update UI state based on canary enabled
+  updateCanaryUI();
+
   // Setup event listeners
   els.saveBtn.addEventListener("click", save);
+  els.canaryEnabled.addEventListener("change", updateCanaryUI);
+}
+
+function updateCanaryUI() {
+  const enabled = els.canaryEnabled.checked;
+  els.canaryAutoVerify.disabled = !enabled;
+  els.maxCanaryVerifications.disabled = !enabled;
+  els.inScopeHosts.disabled = !enabled;
 }
 
 // ============================================================
@@ -99,6 +149,12 @@ async function save() {
   const ignoreParams = els.ignoreParams.value
     .split("\n")
     .map(s => s.trim())
+    .filter(Boolean);
+
+  // Parse in-scope hosts (normalize to lowercase)
+  const inScopeHosts = els.inScopeHosts.value
+    .split("\n")
+    .map(s => s.trim().toLowerCase())
     .filter(Boolean);
 
   // Build options object
@@ -118,7 +174,20 @@ async function save() {
     scanInlineScripts: els.scanInlineScripts.checked,
 
     // Ignored params
-    ignoreParams
+    ignoreParams,
+
+    // Scope
+    inScopeHosts,
+
+    // Canary verification
+    canaryEnabled: els.canaryEnabled.checked,
+    canaryAutoVerify: els.canaryAutoVerify.checked,
+    maxCanaryVerifications: Number(els.maxCanaryVerifications.value) || defaults.maxCanaryVerifications,
+
+    // Taint detection
+    enableTaintAnalysis: els.enableTaintAnalysis.checked,
+    enableInstrumentation: els.enableInstrumentation.checked,
+    minTokenLength: Number(els.minTokenLength.value) || defaults.minTokenLength
   };
 
   try {

@@ -294,6 +294,68 @@
     </div>
   </div>
 
+  <!-- Taint Detection Section -->
+  <div class="section">
+    <h2>Taint Detection (Source-to-Sink Analysis)</h2>
+    <div class="hint" style="margin-bottom: 12px;">
+      Heuristic analysis to detect when attacker-controlled input flows to dangerous sinks.
+    </div>
+
+    <div class="checkbox-group">
+      <div class="checkbox-item">
+        <input type="checkbox" id="enableTaintAnalysis" checked>
+        <label for="enableTaintAnalysis">Enable static taint analysis (scan scripts for source-to-sink patterns)</label>
+      </div>
+      <div class="checkbox-item">
+        <input type="checkbox" id="enableInstrumentation">
+        <label for="enableInstrumentation">Enable runtime instrumentation (monitor sink calls at runtime - more thorough but may impact performance)</label>
+      </div>
+    </div>
+
+    <div class="field" style="margin-top: 12px;">
+      <label>Minimum Token Length for Matches</label>
+      <input type="number" id="minTokenLength" min="4" max="20" value="6">
+      <div class="hint">Shorter values may produce false positives; longer values may miss matches</div>
+    </div>
+  </div>
+
+  <!-- Canary Verification Section -->
+  <div class="section">
+    <h2>Canary Verification (Active Testing)</h2>
+    <div class="hint" style="margin-bottom: 12px;">
+      Verify reflections by sending a unique canary value and checking if it appears in the response.
+      <strong>Only runs on in-scope hosts.</strong>
+    </div>
+
+    <div class="toggle-row" style="border-bottom: 1px solid #eee; margin-bottom: 16px;">
+      <div>
+        <div class="toggle-label">Enable Canary Verification</div>
+        <div class="toggle-hint">When enabled, adds "Verify" buttons to findings on in-scope hosts</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="canaryEnabled">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="field">
+      <label>In-Scope Hosts (one per line)</label>
+      <textarea id="inScopeHosts" rows="4" placeholder="example.com&#10;*.example.org"></textarea>
+      <div class="hint">Hostnames where canary verification is allowed. Use * as wildcard prefix (e.g., *.example.com)</div>
+    </div>
+
+    <div class="checkbox-item" style="margin-bottom: 12px;">
+      <input type="checkbox" id="canaryAutoVerify">
+      <label for="canaryAutoVerify">Auto-verify on manual scan (still respects scope and limits)</label>
+    </div>
+
+    <div class="field">
+      <label>Max Verifications Per Page</label>
+      <input type="number" id="maxCanaryVerifications" min="1" max="10" value="3">
+      <div class="hint">Limit active verification requests per scan (prevents excessive requests)</div>
+    </div>
+  </div>
+
   <!-- Save Button -->
   <div class="footer">
     <button class="btn btn-primary" id="saveBtn">Save Settings</button>
