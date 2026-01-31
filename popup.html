@@ -671,20 +671,108 @@
       color: #888;
     }
 
+    .taint-detail-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 4px;
+      font-size: 10px;
+      align-items: baseline;
+    }
+
+    .taint-detail-label {
+      color: #888;
+      white-space: nowrap;
+      flex-shrink: 0;
+      font-weight: 500;
+    }
+
+    .taint-value {
+      font-family: "SF Mono", Monaco, Consolas, monospace;
+      font-size: 10px;
+      color: #333;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .taint-value-expandable {
+      display: inline;
+    }
+
+    .taint-value-expandable summary {
+      cursor: pointer;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
+      font-size: 10px;
+      color: #333;
+      word-break: break-all;
+      white-space: pre-wrap;
+      list-style: none;
+    }
+
+    .taint-value-expandable summary::after {
+      content: " [show more]";
+      color: #667eea;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9px;
+      cursor: pointer;
+    }
+
+    .taint-value-expandable[open] summary {
+      display: none;
+    }
+
+    .taint-value-full {
+      display: block;
+      background: rgba(0,0,0,0.04);
+      padding: 4px 6px;
+      border-radius: 3px;
+      margin-top: 2px;
+    }
+
     .taint-evidence {
       font-family: "SF Mono", Monaco, Consolas, monospace;
       font-size: 10px;
       color: #666;
-      padding: 4px;
-      background: rgba(0,0,0,0.03);
-      border-radius: 2px;
-      margin-bottom: 4px;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .taint-evidence-expandable {
+      display: inline;
+    }
+
+    .taint-evidence-expandable summary {
+      cursor: pointer;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
+      font-size: 10px;
+      color: #666;
+      word-break: break-all;
+      white-space: pre-wrap;
+      list-style: none;
+    }
+
+    .taint-evidence-expandable summary::after {
+      content: " [show more]";
+      color: #667eea;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9px;
+      cursor: pointer;
+    }
+
+    .taint-evidence-expandable[open] summary {
+      display: none;
+    }
+
+    .taint-evidence-full {
+      display: block;
+      background: rgba(0,0,0,0.04);
+      padding: 4px 6px;
+      border-radius: 3px;
+      margin-top: 2px;
     }
 
     .taint-dom-path {
       font-size: 10px;
       color: #888;
-      margin-bottom: 4px;
     }
 
     .taint-hints {

@@ -431,7 +431,7 @@
           confidence: "high",
           source: src,
           matchType: "exact",
-          evidence: `Exact match: "${truncateEvidence(sinkValue)}"`
+          evidence: `Exact match: "${sinkValue}"`
         };
       }
 
@@ -442,7 +442,7 @@
             confidence: "high",
             source: src,
             matchType: "variant",
-            evidence: `Variant match: "${truncateEvidence(v)}"`
+            evidence: `Variant match: "${v}"`
           };
         }
       }
@@ -507,14 +507,14 @@
       source: {
         type: correlation.source.type,
         key: correlation.source.key,
-        value: truncateEvidence(correlation.source.raw, 100)
+        value: truncateEvidence(correlation.source.raw)
       },
       sink: {
         name: sinkName,
         category: sinkInfo.category,
         severity: sinkInfo.severity,
         context: sinkInfo.context,
-        value: truncateEvidence(sinkValue, 100)
+        value: truncateEvidence(sinkValue)
       },
       confidence: correlation.confidence,
       matchType: correlation.matchType,
@@ -975,14 +975,14 @@
       source: {
         type: correlation.source.type,
         key: correlation.source.key,
-        value: truncateEvidence(correlation.source.raw, 100)
+        value: truncateEvidence(correlation.source.raw)
       },
       sink: {
         name: effectiveSinkName,
         category: effectiveCategory,
         severity: effectiveSeverity,
         context: "selector",
-        value: truncateEvidence(selectorStr, 100)
+        value: truncateEvidence(selectorStr)
       },
       confidence: correlation.confidence,
       matchType: correlation.matchType,
@@ -1371,7 +1371,7 @@
         sources: sources.map(s => ({
           type: s.type,
           key: s.key,
-          preview: truncateEvidence(s.raw, 30)
+          preview: truncateEvidence(s.raw, 80)
         }))
       }
     };
@@ -1426,14 +1426,14 @@
           source: {
             type: src.type,
             key: src.key,
-            value: truncateEvidence(src.raw, 100)
+            value: truncateEvidence(src.raw)
           },
           sink: {
             name: sinkType,
             category: sinkInfo.category,
             severity: sinkInfo.severity,
             context: "script",
-            value: truncateEvidence(context, 100)
+            value: truncateEvidence(context)
           },
           confidence: confidence,
           matchType: "static-pattern",
@@ -1497,14 +1497,14 @@
           source: {
             type: src.type,
             key: src.key,
-            value: truncateEvidence(src.raw, 100)
+            value: truncateEvidence(src.raw)
           },
           sink: {
             name: sinkType,
             category: effectiveCategory,
             severity: effectiveSeverity,
             context: "selector",
-            value: truncateEvidence(context, 100)
+            value: truncateEvidence(context)
           },
           confidence,
           matchType: "static-selector-pattern",
@@ -1602,7 +1602,7 @@
                 category: sinkPattern.category,
                 severity: effectiveSeverity,
                 context: sinkPattern.category === "Selector-Injection" ? "selector" : "script",
-                value: truncateEvidence(snippet, 120)
+                value: truncateEvidence(snippet)
               },
               confidence: "high",
               matchType: "code-flow",
@@ -1906,12 +1906,14 @@
   }
 
   /**
-   * Truncate evidence string for display.
+   * Cap a string to a maximum length for storage.
+   * Uses a generous default (500) to preserve investigative detail.
+   * Display-time truncation happens separately in popup.js.
    */
-  function truncateEvidence(str, maxLen = 50) {
+  function truncateEvidence(str, maxLen = 500) {
     if (!str || typeof str !== "string") return "";
     if (str.length <= maxLen) return str;
-    return str.slice(0, maxLen) + "...";
+    return str.slice(0, maxLen) + "…[" + (str.length - maxLen) + " more chars]";
   }
 
   // ============================================================

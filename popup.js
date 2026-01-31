@@ -581,6 +581,21 @@ function renderTaintFindings(taintData) {
 }
 
 /**
+ * Render a truncatable value: short preview with expand toggle for full text.
+ * If the value is short enough, just renders it inline.
+ */
+function renderTruncatable(value, previewLen = 80, cssClass = "taint-value") {
+  if (!value) return "";
+  const escaped = escapeHtml(value);
+  if (value.length <= previewLen) {
+    return `<span class="${cssClass}">${escaped}</span>`;
+  }
+  const preview = escapeHtml(value.slice(0, previewLen));
+  // Use a <details> for expand/collapse with the full value inside
+  return `<details class="${cssClass}-expandable"><summary class="${cssClass}">${preview}…</summary><span class="${cssClass} ${cssClass}-full">${escaped}</span></details>`;
+}
+
+/**
  * Render a single taint finding.
  */
 function renderTaintFinding(f) {
@@ -594,7 +609,7 @@ function renderTaintFinding(f) {
     low: "severity-low"
   }[f.sink?.severity] || "severity-low";
 
-  // Source → Sink flow
+  // Source → Sink flow header
   const flowHtml = `
     <div class="taint-flow">
       <span class="taint-source" title="Source: ${escapeHtml(f.source?.type || "")}">
@@ -607,7 +622,7 @@ function renderTaintFinding(f) {
     </div>
   `;
 
-  // Confidence and evidence
+  // Confidence and match type
   const confidenceHtml = `
     <div class="taint-confidence">
       <span class="confidence-badge confidence-${f.confidence}">${f.confidence?.toUpperCase() || "?"}</span>
@@ -615,19 +630,61 @@ function renderTaintFinding(f) {
     </div>
   `;
 
-  // Evidence snippet
-  const evidenceHtml = f.evidence ? `
-    <div class="taint-evidence" title="${escapeHtml(f.evidence)}">
-      ${escapeHtml(f.evidence.length > 60 ? f.evidence.slice(0, 60) + "..." : f.evidence)}
-    </div>
-  ` : "";
+  // Source value (expandable)
+  let sourceValueHtml = "";
+  if (f.source?.value) {
+    sourceValueHtml = `
+      <div class="taint-detail-row">
+        <span class="taint-detail-label">Source value:</span>
+        ${renderTruncatable(f.source.value, 80, "taint-value")}
+      </div>
+    `;
+  }
+
+  // Sink value (expandable)
+  let sinkValueHtml = "";
+  if (f.sink?.value) {
+    sinkValueHtml = `
+      <div class="taint-detail-row">
+        <span class="taint-detail-label">Sink value:</span>
+        ${renderTruncatable(f.sink.value, 80, "taint-value")}
+      </div>
+    `;
+  }
+
+  // Evidence (expandable)
+  let evidenceHtml = "";
+  if (f.evidence) {
+    evidenceHtml = `
+      <div class="taint-detail-row">
+        <span class="taint-detail-label">Evidence:</span>
+        ${renderTruncatable(f.evidence, 100, "taint-evidence")}
+      </div>
+    `;
+  }
 
   // DOM path if available
   const domPathHtml = f.domPath ? `
-    <div class="taint-dom-path" title="${escapeHtml(f.domPath)}">
-      ${escapeHtml(f.domPath)}
+    <div class="taint-detail-row">
+      <span class="taint-detail-label">DOM:</span>
+      <span class="taint-dom-path">${escapeHtml(f.domPath)}</span>
     </div>
   ` : "";
+
+  // Selector risk details (for Selector-Injection findings)
+  let selectorRisksHtml = "";
+  if (f.selectorRisks?.length) {
+    const riskItems = f.selectorRisks.map(r => {
+      const riskClass = `selector-risk-${r.risk}`;
+      return `<span class="selector-risk ${riskClass}" title="${escapeHtml(r.notes)}">${escapeHtml(r.id)}</span>`;
+    }).join(" ");
+    selectorRisksHtml = `
+      <div class="selector-risks">
+        <span class="selector-risks-label">Selector risks:</span>
+        ${riskItems}
+      </div>
+    `;
+  }
 
   // Triage hints
   let hintsHtml = "";
@@ -645,22 +702,7 @@ function renderTaintFinding(f) {
     `;
   }
 
-  // Selector risk details (for Selector-Injection findings)
-  let selectorRisksHtml = "";
-  if (f.selectorRisks?.length) {
-    const riskItems = f.selectorRisks.map(r => {
-      const riskClass = `selector-risk-${r.risk}`;
-      return `<span class="selector-risk ${riskClass}" title="${escapeHtml(r.notes)}">${escapeHtml(r.id)}</span>`;
-    }).join(" ");
-    selectorRisksHtml = `
-      <div class="selector-risks">
-        <span class="selector-risks-label">Selector risks:</span>
-        ${riskItems}
-      </div>
-    `;
-  }
-
-  div.innerHTML = flowHtml + confidenceHtml + evidenceHtml + selectorRisksHtml + domPathHtml + hintsHtml;
+  div.innerHTML = flowHtml + confidenceHtml + sourceValueHtml + sinkValueHtml + evidenceHtml + selectorRisksHtml + domPathHtml + hintsHtml;
   return div;
 }
 
