@@ -152,11 +152,12 @@
     { pattern: /\bFunction\s*\(/, sinkType: "Function", confidence: "high" },
     { pattern: /setTimeout\s*\(\s*['"`]/, sinkType: "setTimeout-string", confidence: "high" },
     { pattern: /setInterval\s*\(\s*['"`]/, sinkType: "setInterval-string", confidence: "high" },
-    // Location manipulation (writes only — must have assignment, not just property reads)
-    { pattern: /location\s*=\s*[^=]/, sinkType: "location", confidence: "medium" },
+    // Location manipulation (writes only — exclude object property assignments like e.location=)
+    { pattern: /(?:^|[;\s{(,!])location\s*=\s*[^=]/, sinkType: "location", confidence: "medium" },
+    { pattern: /(?:window|document|self)\.location\s*=\s*[^=]/, sinkType: "location", confidence: "medium" },
     { pattern: /location\.href\s*=\s*[^=]/, sinkType: "location.href", confidence: "medium" },
-    { pattern: /location\.assign\s*\(/, sinkType: "location.assign", confidence: "medium" },
-    { pattern: /location\.replace\s*\(/, sinkType: "location.replace", confidence: "medium" },
+    { pattern: /(?:window\.)?location\.assign\s*\(/, sinkType: "location.assign", confidence: "medium" },
+    { pattern: /(?:window\.)?location\.replace\s*\(/, sinkType: "location.replace", confidence: "medium" },
     { pattern: /\.href\s*=\s*[^=]/, sinkType: "href-assignment", confidence: "medium" },
     { pattern: /\.src\s*=\s*[^=]/, sinkType: "src-assignment", confidence: "medium" },
     // jQuery-style HTML insertion
@@ -251,9 +252,12 @@
     { pattern: /\)\.append\s*\(/, sinkName: "$.append", category: "DOM-XSS", severity: "high" },
     { pattern: /\)\.prepend\s*\(/, sinkName: "$.prepend", category: "DOM-XSS", severity: "high" },
     // Open redirect sinks
-    { pattern: /location\s*=\s*/, sinkName: "location", category: "Open-Redirect", severity: "medium" },
-    { pattern: /location\.assign\s*\(/, sinkName: "location.assign", category: "Open-Redirect", severity: "medium" },
-    { pattern: /location\.replace\s*\(/, sinkName: "location.replace", category: "Open-Redirect", severity: "medium" },
+    // Use negative lookbehind to exclude object property assignments like e.location=, this.location=, t.location=
+    // Only match bare `location =` or `window.location =` or `document.location =` or `self.location =`
+    { pattern: /(?:^|[;\s{(,!])location\s*=\s*/, sinkName: "location", category: "Open-Redirect", severity: "medium" },
+    { pattern: /(?:window|document|self)\.location\s*=\s*/, sinkName: "location", category: "Open-Redirect", severity: "medium" },
+    { pattern: /(?:window\.)?location\.assign\s*\(/, sinkName: "location.assign", category: "Open-Redirect", severity: "medium" },
+    { pattern: /(?:window\.)?location\.replace\s*\(/, sinkName: "location.replace", category: "Open-Redirect", severity: "medium" },
     { pattern: /window\.open\s*\(/, sinkName: "window.open", category: "Open-Redirect", severity: "medium" },
     // Selector injection sinks
     { pattern: /\$\(\s*['"`]?[^)]*:contains\s*\(/, sinkName: "$.selector:contains", category: "Selector-Injection", severity: "high", selectorRisk: "contains" },
@@ -516,11 +520,27 @@
     return bestMatch;
   }
 
+  // Source types that are generally NOT attacker-controlled on first-party sites.
+  // Cookies (SID, APISID) and localStorage/sessionStorage are set by the app itself.
+  // Downgrade confidence for these since they produce high FP rates on complex apps.
+  const LOW_CONTROL_SOURCE_TYPES = new Set([
+    SOURCE_TYPES.COOKIE,
+    SOURCE_TYPES.STORAGE
+  ]);
+
   /**
    * Record a taint finding when source flows to sink.
    */
   function recordTaintFinding(sinkName, sinkValue, correlation, context) {
     if (!correlation) return;
+
+    // Downgrade confidence for sources that are typically not attacker-controlled
+    // (first-party cookies, app-internal localStorage/sessionStorage)
+    let effectiveConfidence = correlation.confidence;
+    if (LOW_CONTROL_SOURCE_TYPES.has(correlation.source.type)) {
+      if (effectiveConfidence === "high") effectiveConfidence = "medium";
+      else if (effectiveConfidence === "medium") effectiveConfidence = "low";
+    }
 
     const sinkInfo = SINK_REGISTRY[sinkName] || {
       category: "Unknown",
@@ -542,7 +562,7 @@
         context: sinkInfo.context,
         value: truncateEvidence(sinkValue)
       },
-      confidence: correlation.confidence,
+      confidence: effectiveConfidence,
       matchType: correlation.matchType,
       evidence: correlation.evidence,
       domPath: context?.domPath || null,
@@ -911,12 +931,23 @@
     }
   }
 
+  // Elements where innerHTML/outerHTML content is treated as text, not rendered HTML.
+  // Writing to these is not exploitable for XSS.
+  const SAFE_INNERHTML_TAGS = new Set(["textarea", "title", "style", "script", "noscript"]);
+
   /**
    * Check if a value flowing to a sink correlates with a source.
    */
   function checkSinkValue(sinkName, value, element) {
     if (!value || typeof value !== "string") return;
     if (value.length < MIN_TOKEN_LENGTH) return;
+
+    // Skip innerHTML/outerHTML writes to safe elements (textarea, title, etc.)
+    // Content in these elements is treated as text, not rendered as HTML
+    if ((sinkName === "innerHTML" || sinkName === "outerHTML") && element) {
+      const tag = element.tagName?.toLowerCase();
+      if (tag && SAFE_INNERHTML_TAGS.has(tag)) return;
+    }
 
     // Skip if this looks like a template or framework binding
     if (isFrameworkTemplate(value)) return;
