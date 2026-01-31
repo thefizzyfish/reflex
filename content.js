@@ -152,10 +152,13 @@
     { pattern: /\bFunction\s*\(/, sinkType: "Function", confidence: "high" },
     { pattern: /setTimeout\s*\(\s*['"`]/, sinkType: "setTimeout-string", confidence: "high" },
     { pattern: /setInterval\s*\(\s*['"`]/, sinkType: "setInterval-string", confidence: "high" },
-    // Location manipulation
-    { pattern: /location\s*[=.]/, sinkType: "location", confidence: "medium" },
-    { pattern: /\.href\s*[=+]/, sinkType: "href-assignment", confidence: "medium" },
-    { pattern: /\.src\s*[=+]/, sinkType: "src-assignment", confidence: "medium" },
+    // Location manipulation (writes only — must have assignment, not just property reads)
+    { pattern: /location\s*=\s*[^=]/, sinkType: "location", confidence: "medium" },
+    { pattern: /location\.href\s*=\s*[^=]/, sinkType: "location.href", confidence: "medium" },
+    { pattern: /location\.assign\s*\(/, sinkType: "location.assign", confidence: "medium" },
+    { pattern: /location\.replace\s*\(/, sinkType: "location.replace", confidence: "medium" },
+    { pattern: /\.href\s*=\s*[^=]/, sinkType: "href-assignment", confidence: "medium" },
+    { pattern: /\.src\s*=\s*[^=]/, sinkType: "src-assignment", confidence: "medium" },
     // jQuery-style HTML insertion
     { pattern: /\$\([^)]*\)\.html\s*\(/, sinkType: "jQuery.html", confidence: "medium" },
     { pattern: /\$\([^)]*\)\.append\s*\(/, sinkType: "jQuery.append", confidence: "medium" },
@@ -307,12 +310,31 @@
       sources.push(createSource(SOURCE_TYPES.FRAGMENT, k, v, decodeDepth));
     }
 
-    // Path segments (if they look like values, not just route parts)
-    const pathParts = url.pathname.split("/").filter(p => p && p.length >= minLen);
+    // Path segments (only if they look like user-supplied values, not route parts)
+    // Path segments are high-FP sources: common words like "post", "search", "page"
+    // appear as coincidental substrings in script code constantly.
+    // Only include segments that are long enough and look like actual values.
+    const PATH_MIN_LEN = 8; // Stricter minimum for path segments
+    const COMMON_ROUTE_WORDS = new Set([
+      "api", "static", "assets", "images", "js", "css", "fonts", "media",
+      "resources", "public", "dist", "build", "lib", "vendor", "node_modules",
+      "post", "posts", "page", "pages", "blog", "home", "index", "login",
+      "logout", "signup", "register", "admin", "dashboard", "settings",
+      "profile", "user", "users", "account", "search", "help", "about",
+      "contact", "terms", "privacy", "error", "404", "500", "new", "edit",
+      "delete", "create", "update", "view", "list", "detail", "item",
+      "category", "categories", "tag", "tags", "comment", "comments",
+      "image", "file", "files", "upload", "download", "data", "json",
+      "xml", "html", "feed", "rss", "sitemap", "robots", "favicon"
+    ]);
+    const pathParts = url.pathname.split("/").filter(p => p && p.length >= PATH_MIN_LEN);
     for (let i = 0; i < pathParts.length; i++) {
       const p = pathParts[i];
-      // Skip common route patterns
-      if (/^(api|v\d+|static|assets|images|js|css)$/i.test(p)) continue;
+      // Skip common route words and version patterns
+      if (COMMON_ROUTE_WORDS.has(p.toLowerCase())) continue;
+      if (/^v\d+$/i.test(p)) continue;
+      // Skip segments that look like purely numeric IDs (not interesting as reflected values)
+      if (/^\d+$/.test(p)) continue;
       sources.push(createSource(SOURCE_TYPES.PATH, `path[${i}]`, p, decodeDepth));
     }
 
@@ -332,7 +354,11 @@
     }
 
     // Document URL / baseURI
-    sources.push(createSource(SOURCE_TYPES.DOCUMENT_URL, "document.URL", document.URL, decodeDepth));
+    // Mark as runtimeOnly — useful for runtime sink correlation (e.g., location.href = document.URL)
+    // but not for static script analysis (URL substrings match too many code identifiers)
+    const docUrlSource = createSource(SOURCE_TYPES.DOCUMENT_URL, "document.URL", document.URL, decodeDepth);
+    docUrlSource.runtimeOnly = true;
+    sources.push(docUrlSource);
 
     // Window name (classic DOM XSS vector)
     if (window.name && window.name.length >= minLen) {
@@ -1388,6 +1414,10 @@
     for (const src of sources) {
       if (src.raw.length < MIN_TOKEN_LENGTH) continue;
 
+      // Skip sources marked as runtime-only (e.g., document.URL) — their values
+      // are too broad for static substring matching in script code
+      if (src.runtimeOnly) continue;
+
       // Check if source value appears in script
       if (!scriptContent.includes(src.raw)) continue;
 
@@ -1406,11 +1436,41 @@
   }
 
   /**
+   * Check if a source value match in script text looks like a standalone value
+   * (e.g., in a string literal or data structure) vs. part of a code identifier
+   * or property access.
+   *
+   * Returns false for matches embedded in identifiers like "searchParams", "postMessage",
+   * "hostname", or property accesses like "t.search", "location.pathname".
+   */
+  function isLikelyValueMatch(scriptContent, matchIdx, matchLen) {
+    const charBefore = matchIdx > 0 ? scriptContent[matchIdx - 1] : "";
+    const charAfter = matchIdx + matchLen < scriptContent.length ? scriptContent[matchIdx + matchLen] : "";
+
+    // Characters that indicate the match is part of a code construct:
+    // \w = identifier chars (a-z, A-Z, 0-9, _)
+    // .  = property access (t.search, location.pathname)
+    const isCodeChar = c => /[\w.]/.test(c);
+
+    if (isCodeChar(charBefore) || isCodeChar(charAfter)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Find a static sink pattern near a source value in script content.
    */
   function findStaticSinkPattern(scriptContent, src, pattern, sinkType, confidence, findings) {
     let idx = 0;
     while ((idx = scriptContent.indexOf(src.raw, idx)) !== -1) {
+      // Skip matches that are part of larger identifiers (e.g., "search" in "searchParams")
+      if (!isLikelyValueMatch(scriptContent, idx, src.raw.length)) {
+        idx += src.raw.length;
+        continue;
+      }
+
       const contextStart = Math.max(0, idx - 150);
       const contextEnd = Math.min(scriptContent.length, idx + src.raw.length + 150);
       const context = scriptContent.slice(contextStart, contextEnd);
@@ -1456,6 +1516,12 @@
   function findStaticSelectorPattern(scriptContent, src, pattern, sinkType, confidence, findings) {
     let idx = 0;
     while ((idx = scriptContent.indexOf(src.raw, idx)) !== -1) {
+      // Skip matches that are part of larger identifiers
+      if (!isLikelyValueMatch(scriptContent, idx, src.raw.length)) {
+        idx += src.raw.length;
+        continue;
+      }
+
       const contextStart = Math.max(0, idx - 200);
       const contextEnd = Math.min(scriptContent.length, idx + src.raw.length + 200);
       const context = scriptContent.slice(contextStart, contextEnd);
